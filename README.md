@@ -11,6 +11,56 @@ It uses:
 
 ---
 
+## Quick Start (Copy/Paste)
+
+If you just want commands you can paste directly, use one of these blocks.
+
+### Linux (bash)
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python3 -m pip install --upgrade pip
+pip install -r requirements.txt
+
+# Install one Argos model pair (example: English -> French)
+python3 - <<'PY'
+from argostranslate import package
+
+FROM_CODE = "en"
+TO_CODE = "fr"
+
+package.update_package_index()
+available = package.get_available_packages()
+match = next((p for p in available if p.from_code == FROM_CODE and p.to_code == TO_CODE), None)
+if not match:
+    raise SystemExit(f"No package found for {FROM_CODE}->{TO_CODE}")
+path = match.download()
+package.install_from_path(path)
+print(f"Installed Argos model: {FROM_CODE}->{TO_CODE}")
+PY
+
+python3 app.py
+```
+
+### Windows (PowerShell)
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+
+# Install one Argos model pair (example: English -> French)
+python -c "from argostranslate import package; FROM='en'; TO='fr'; package.update_package_index(); pkg=next((p for p in package.get_available_packages() if p.from_code==FROM and p.to_code==TO), None); path=pkg.download() if pkg else (_ for _ in ()).throw(SystemExit(f'No package found for {FROM}->{TO}')); package.install_from_path(path); print(f'Installed Argos model: {FROM}->{TO}')"
+
+python app.py
+```
+
+> Want a different language pair? Change `FROM_CODE` / `TO_CODE` (Linux block) or `FROM` / `TO` (Windows block), e.g. `en` -> `es`, `de` -> `en`, etc.
+
+---
+
 ## 1) Prerequisites
 
 - Windows 10/11 **or** Linux (Ubuntu/Debian/Fedora/Arch should all work)
@@ -119,9 +169,9 @@ python -m argostranslate.package install C:\path\to\translate-en_fr.argosmodel
 python3 -m argostranslate.package install /path/to/translate-en_fr.argosmodel
 ```
 
-### Option B: Download model files first, then install locally
+### Option B: Download + install from terminal
 
-If your machine has internet once, download the model file(s), move them to your offline machine, then run the same install command above.
+Use the copy/paste blocks in **Quick Start (Copy/Paste)** above.
 
 ---
 
