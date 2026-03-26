@@ -1,7 +1,9 @@
 import os
 import threading
+import platform
 from pathlib import Path
 import tkinter as tk
+import tkinter.font as tkfont
 from tkinter import filedialog, messagebox
 from tkinter import ttk
 
@@ -15,6 +17,7 @@ class PDFTranslatorApp:
         self.root.title("PagePhrase Offline PDF Translator")
         self.root.geometry("860x560")
         self.root.minsize(760, 500)
+        self.ui_font = self._pick_font_family()
 
         self.style = ttk.Style()
         if "vista" in self.style.theme_names():
@@ -45,6 +48,22 @@ class PDFTranslatorApp:
             langs[name] = lang
         return dict(sorted(langs.items()))
 
+    def _pick_font_family(self):
+        system = platform.system().lower()
+        available = set(tkfont.families(self.root))
+
+        if system == "windows":
+            preferred = ["Segoe UI", "Arial", "TkDefaultFont"]
+        elif system == "linux":
+            preferred = ["Noto Sans", "Ubuntu", "DejaVu Sans", "Liberation Sans", "TkDefaultFont"]
+        else:
+            preferred = ["Arial", "Helvetica", "TkDefaultFont"]
+
+        for family in preferred:
+            if family in available:
+                return family
+        return "TkDefaultFont"
+
     def _build_ui(self):
         container = ttk.Frame(self.root, padding=24)
         container.pack(fill="both", expand=True)
@@ -52,14 +71,14 @@ class PDFTranslatorApp:
         title = ttk.Label(
             container,
             text="Offline PDF Translator",
-            font=("Segoe UI", 22, "bold"),
+            font=(self.ui_font, 22, "bold"),
         )
         title.pack(anchor="w")
 
         subtitle = ttk.Label(
             container,
             text="Translate PDF text offline while preserving layout and images as much as possible.",
-            font=("Segoe UI", 10),
+            font=(self.ui_font, 10),
         )
         subtitle.pack(anchor="w", pady=(4, 20))
 
@@ -67,22 +86,22 @@ class PDFTranslatorApp:
         card.pack(fill="both", expand=True)
 
         # Input PDF
-        ttk.Label(card, text="Input PDF", font=("Segoe UI", 10, "bold")).grid(row=0, column=0, sticky="w")
+        ttk.Label(card, text="Input PDF", font=(self.ui_font, 10, "bold")).grid(row=0, column=0, sticky="w")
         ttk.Entry(card, textvariable=self.input_file).grid(row=1, column=0, sticky="ew", padx=(0, 10))
         ttk.Button(card, text="Browse", command=self.pick_input).grid(row=1, column=1, sticky="ew")
 
         # Output PDF
-        ttk.Label(card, text="Output PDF", font=("Segoe UI", 10, "bold")).grid(row=2, column=0, sticky="w", pady=(20, 0))
+        ttk.Label(card, text="Output PDF", font=(self.ui_font, 10, "bold")).grid(row=2, column=0, sticky="w", pady=(20, 0))
         ttk.Entry(card, textvariable=self.output_file).grid(row=3, column=0, sticky="ew", padx=(0, 10))
         ttk.Button(card, text="Save As", command=self.pick_output).grid(row=3, column=1, sticky="ew")
 
         # Languages
-        ttk.Label(card, text="From Language", font=("Segoe UI", 10, "bold")).grid(row=4, column=0, sticky="w", pady=(20, 0))
+        ttk.Label(card, text="From Language", font=(self.ui_font, 10, "bold")).grid(row=4, column=0, sticky="w", pady=(20, 0))
         self.from_combo = ttk.Combobox(card, textvariable=self.from_lang, state="readonly")
         self.from_combo["values"] = list(self.language_map.keys())
         self.from_combo.grid(row=5, column=0, sticky="ew", padx=(0, 10))
 
-        ttk.Label(card, text="To Language", font=("Segoe UI", 10, "bold")).grid(row=4, column=1, sticky="w", pady=(20, 0))
+        ttk.Label(card, text="To Language", font=(self.ui_font, 10, "bold")).grid(row=4, column=1, sticky="w", pady=(20, 0))
         self.to_combo = ttk.Combobox(card, textvariable=self.to_lang, state="readonly")
         self.to_combo["values"] = list(self.language_map.keys())
         self.to_combo.grid(row=5, column=1, sticky="ew")
