@@ -1,6 +1,6 @@
 # PagePhrase Offline PDF Translator
 
-A Windows-friendly Python desktop app to translate **PDF to PDF** from the terminal.
+A cross-platform Python desktop app (Windows + Linux) to translate **PDF to PDF** from the terminal.
 
 It uses:
 - **PyMuPDF** for PDF parsing/writing.
@@ -13,13 +13,40 @@ It uses:
 
 ## 1) Prerequisites
 
-- Windows 10/11
-- Python 3.10+ installed and available in terminal as `python`
+- Windows 10/11 **or** Linux (Ubuntu/Debian/Fedora/Arch should all work)
+- Python 3.10+ installed and available in terminal (`python` or `python3`)
+- Tkinter available in your Python install (usually included on Windows, may need package install on Linux)
 
 Check:
 
+**Windows (PowerShell)**
 ```powershell
 python --version
+```
+
+**Linux (bash)**
+```bash
+python3 --version
+```
+
+### Linux package notes (Tkinter + venv)
+
+If needed, install prerequisites first:
+
+**Ubuntu / Debian**
+```bash
+sudo apt update
+sudo apt install -y python3 python3-venv python3-tk
+```
+
+**Fedora**
+```bash
+sudo dnf install -y python3 python3-tkinter
+```
+
+**Arch Linux**
+```bash
+sudo pacman -S --needed python tk
 ```
 
 ---
@@ -28,7 +55,14 @@ python --version
 
 If you already have this folder, open terminal in it. Otherwise:
 
+**Windows (PowerShell)**
 ```powershell
+git clone <your-repo-url>
+cd PagePhrase
+```
+
+**Linux (bash)**
+```bash
 git clone <your-repo-url>
 cd PagePhrase
 ```
@@ -37,17 +71,31 @@ cd PagePhrase
 
 ## 3) Create and activate a virtual environment
 
+**Windows (PowerShell)**
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
+```
+
+**Linux (bash)**
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
 ```
 
 ---
 
 ## 4) Install dependencies
 
+**Windows (PowerShell)**
 ```powershell
 python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+**Linux (bash)**
+```bash
+python3 -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
@@ -61,8 +109,14 @@ Argos needs local language model files (`.argosmodel`) installed.
 
 Install each model file:
 
+**Windows example**
 ```powershell
 python -m argostranslate.package install C:\path\to\translate-en_fr.argosmodel
+```
+
+**Linux example**
+```bash
+python3 -m argostranslate.package install /path/to/translate-en_fr.argosmodel
 ```
 
 ### Option B: Download model files first, then install locally
@@ -73,8 +127,14 @@ If your machine has internet once, download the model file(s), move them to your
 
 ## 6) Run the app from terminal
 
+**Windows (PowerShell)**
 ```powershell
 python app.py
+```
+
+**Linux (bash)**
+```bash
+python3 app.py
 ```
 
 ---
