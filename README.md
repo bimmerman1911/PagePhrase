@@ -203,3 +203,5 @@ python3 app.py
 - Best results come from machine-readable PDFs (not scanned images).
 - Complex layouts are preserved as much as possible, but no tool can guarantee perfect typography parity in every PDF.
 - The app only uses installed offline translation models.
+- If a PDF has only images (for example, scanner output), the app now reports:
+  "No machine-readable text was found... Use OCR first, then run translation again."

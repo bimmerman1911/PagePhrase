@@ -205,6 +205,7 @@ class PDFTranslatorApp:
             doc = fitz.open(in_path)
             total_pages = len(doc)
             translation_cache = {}
+            translated_span_count = 0
 
             for p_index, page in enumerate(doc):
                 blocks = page.get_text("dict").get("blocks", [])
@@ -235,6 +236,7 @@ class PDFTranslatorApp:
                                 color=(0, 0, 0),
                                 align=fitz.TEXT_ALIGN_LEFT,
                             )
+                            translated_span_count += 1
 
                 percent = ((p_index + 1) / total_pages) * 100
                 self.root.after(0, self.progress.set, percent)
@@ -242,6 +244,13 @@ class PDFTranslatorApp:
                     0,
                     self.status.set,
                     f"Translated page {p_index + 1}/{total_pages}",
+                )
+
+            if translated_span_count == 0:
+                raise RuntimeError(
+                    "No machine-readable text was found in this PDF. "
+                    "This file is likely image-only/scanned, so there is nothing to translate. "
+                    "Use OCR first, then run translation again."
                 )
 
             doc.save(out_path)
