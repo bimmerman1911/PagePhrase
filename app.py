@@ -10,6 +10,7 @@ from tkinter import filedialog, messagebox
 from tkinter import ttk
 
 import fitz  # PyMuPDF
+from argostranslate import package
 from argostranslate import translate
 
 
@@ -32,12 +33,14 @@ class PDFTranslatorApp:
         self.status = tk.StringVar(value="Ready")
         self.progress = tk.DoubleVar(value=0)
 
-        self.language_map = self._load_installed_languages()
+        self.installed_languages_by_code = self._load_installed_languages()
+        self.language_names_by_code = self._load_supported_language_names()
+        self.language_options = self._build_language_options()
         self.from_lang = tk.StringVar()
         self.to_lang = tk.StringVar()
 
-        if self.language_map:
-            first = next(iter(self.language_map.keys()))
+        if self.language_options:
+            first = next(iter(self.language_options.keys()))
             self.from_lang.set(first)
             self.to_lang.set(first)
 
@@ -87,9 +90,73 @@ class PDFTranslatorApp:
     def _load_installed_languages(self):
         langs = {}
         for lang in translate.get_installed_languages():
-            name = f"{lang.name} ({lang.code})"
-            langs[name] = lang
-        return dict(sorted(langs.items()))
+            langs[lang.code] = lang
+        return langs
+
+    def _load_supported_language_names(self):
+        names_by_code = {
+            code: lang.name for code, lang in self.installed_languages_by_code.items()
+        }
+        try:
+            package.update_package_index()
+            for available_pkg in package.get_available_packages():
+                names_by_code.setdefault(available_pkg.from_code, available_pkg.from_name)
+                names_by_code.setdefault(available_pkg.to_code, available_pkg.to_name)
+        except Exception:
+            # Network/index failures should not block the app.
+            pass
+        return names_by_code
+
+    def _build_language_options(self):
+        options = {}
+        for code, name in self.language_names_by_code.items():
+            label = f"{name} ({code})"
+            options[label] = code
+        return dict(sorted(options.items()))
+
+    def _refresh_installed_languages(self):
+        self.installed_languages_by_code = self._load_installed_languages()
+
+    def _install_model_if_missing(self, from_code: str, to_code: str):
+        self._refresh_installed_languages()
+        from_lang = self.installed_languages_by_code.get(from_code)
+        to_lang = self.installed_languages_by_code.get(to_code)
+
+        if from_lang and to_lang and from_lang.get_translation(to_lang):
+            return
+
+        self.run_logger.info(
+            "No installed model for %s -> %s. Attempting automatic download.",
+            from_code,
+            to_code,
+        )
+        self.root.after(
+            0,
+            self.status.set,
+            f"Downloading Argos model {from_code} → {to_code}...",
+        )
+
+        package.update_package_index()
+        matching_package = None
+        for available_pkg in package.get_available_packages():
+            if available_pkg.from_code == from_code and available_pkg.to_code == to_code:
+                matching_package = available_pkg
+                break
+
+        if matching_package is None:
+            raise RuntimeError(
+                f"No Argos model found for {from_code} → {to_code}. "
+                "Choose a different language pair."
+            )
+
+        download_path = matching_package.download()
+        package.install_from_path(download_path)
+        self.run_logger.info(
+            "Model download/install completed for %s -> %s.",
+            from_code,
+            to_code,
+        )
+        self._refresh_installed_languages()
 
     def _pick_font_family(self):
         system = platform.system().lower()
@@ -141,12 +208,12 @@ class PDFTranslatorApp:
         # Languages
         ttk.Label(card, text="From Language", font=(self.ui_font, 10, "bold")).grid(row=4, column=0, sticky="w", pady=(20, 0))
         self.from_combo = ttk.Combobox(card, textvariable=self.from_lang, state="readonly")
-        self.from_combo["values"] = list(self.language_map.keys())
+        self.from_combo["values"] = list(self.language_options.keys())
         self.from_combo.grid(row=5, column=0, sticky="ew", padx=(0, 10))
 
         ttk.Label(card, text="To Language", font=(self.ui_font, 10, "bold")).grid(row=4, column=1, sticky="w", pady=(20, 0))
         self.to_combo = ttk.Combobox(card, textvariable=self.to_lang, state="readonly")
-        self.to_combo["values"] = list(self.language_map.keys())
+        self.to_combo["values"] = list(self.language_options.keys())
         self.to_combo.grid(row=5, column=1, sticky="ew")
 
         # Controls
@@ -166,8 +233,8 @@ class PDFTranslatorApp:
         tip = ttk.Label(
             card,
             text=(
-                "Tip: Install Argos language models first (offline .argosmodel files supported). "
-                "The app uses only installed/offline models."
+                "Tip: Choose any Argos-supported language in the list. "
+                "The required model will download automatically when translation starts."
             ),
             foreground="#555555",
         )
@@ -196,10 +263,10 @@ class PDFTranslatorApp:
             self.output_file.set(path)
 
     def validate(self):
-        if not self.language_map:
+        if not self.language_options:
             messagebox.showerror(
-                "No offline language models",
-                "No Argos Translate languages are installed. Install language models first.",
+                "No languages available",
+                "Could not load Argos languages. Check your internet connection and try again.",
             )
             return False
 
@@ -237,13 +304,20 @@ class PDFTranslatorApp:
             out_path = self.output_file.get().strip()
             self._start_verbose_log(out_path)
 
-            from_language = self.language_map[self.from_lang.get()]
-            to_language = self.language_map[self.to_lang.get()]
+            from_code = self.language_options[self.from_lang.get()]
+            to_code = self.language_options[self.to_lang.get()]
+            self._install_model_if_missing(from_code, to_code)
+
+            from_language = self.installed_languages_by_code.get(from_code)
+            to_language = self.installed_languages_by_code.get(to_code)
+            if from_language is None or to_language is None:
+                raise RuntimeError(
+                    f"Installed languages not available for {from_code} → {to_code} after installation."
+                )
             translator = from_language.get_translation(to_language)
             if translator is None:
                 raise RuntimeError(
-                    "No installed offline model for this language pair. "
-                    "Install a matching Argos model."
+                    f"No model available for {from_code} → {to_code}."
                 )
 
             self.run_logger.info("Translator initialized successfully.")
