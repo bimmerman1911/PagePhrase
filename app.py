@@ -1,6 +1,8 @@
 import os
 import threading
 import platform
+import logging
+import traceback
 from pathlib import Path
 import tkinter as tk
 import tkinter.font as tkfont
@@ -39,7 +41,48 @@ class PDFTranslatorApp:
             self.from_lang.set(first)
             self.to_lang.set(first)
 
+        self.run_logger = None
+        self.run_log_handler = None
+        self.run_log_path = None
+
         self._build_ui()
+
+    def _start_verbose_log(self, output_pdf_path: str):
+        output_path = Path(output_pdf_path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        log_path = output_path.with_suffix(".log")
+        logger_name = f"PagePhraseRun-{id(self)}"
+        logger = logging.getLogger(logger_name)
+        logger.setLevel(logging.INFO)
+        logger.handlers.clear()
+        logger.propagate = False
+
+        handler = logging.FileHandler(log_path, mode="w", encoding="utf-8")
+        handler.setFormatter(
+            logging.Formatter(
+                "%(asctime)s | %(levelname)s | %(message)s",
+                datefmt="%Y-%m-%d %H:%M:%S",
+            )
+        )
+        logger.addHandler(handler)
+
+        self.run_logger = logger
+        self.run_log_handler = handler
+        self.run_log_path = str(log_path)
+        logger.info("Verbose translation log started.")
+        logger.info("Input PDF: %s", self.input_file.get().strip())
+        logger.info("Output PDF: %s", output_pdf_path)
+        logger.info("From language: %s", self.from_lang.get())
+        logger.info("To language: %s", self.to_lang.get())
+
+    def _stop_verbose_log(self):
+        if self.run_log_handler and self.run_logger:
+            self.run_logger.info("Verbose translation log finished.")
+            self.run_logger.removeHandler(self.run_log_handler)
+            self.run_log_handler.close()
+        self.run_log_handler = None
+        self.run_logger = None
 
     def _load_installed_languages(self):
         langs = {}
@@ -190,6 +233,10 @@ class PDFTranslatorApp:
 
     def translate_pdf(self):
         try:
+            in_path = self.input_file.get().strip()
+            out_path = self.output_file.get().strip()
+            self._start_verbose_log(out_path)
+
             from_language = self.language_map[self.from_lang.get()]
             to_language = self.language_map[self.to_lang.get()]
             translator = from_language.get_translation(to_language)
@@ -199,16 +246,21 @@ class PDFTranslatorApp:
                     "Install a matching Argos model."
                 )
 
-            in_path = self.input_file.get().strip()
-            out_path = self.output_file.get().strip()
+            self.run_logger.info("Translator initialized successfully.")
 
             doc = fitz.open(in_path)
             total_pages = len(doc)
             translation_cache = {}
             translated_span_count = 0
+            total_span_count = 0
+            cache_hits = 0
+            cache_misses = 0
+            self.run_logger.info("Loaded PDF with %s page(s).", total_pages)
 
             for p_index, page in enumerate(doc):
                 blocks = page.get_text("dict").get("blocks", [])
+                page_span_count = 0
+                page_translated_count = 0
 
                 for block in blocks:
                     for line in block.get("lines", []):
@@ -217,11 +269,16 @@ class PDFTranslatorApp:
                             if not text.strip():
                                 continue
 
+                            total_span_count += 1
+                            page_span_count += 1
+
                             if text in translation_cache:
                                 translated = translation_cache[text]
+                                cache_hits += 1
                             else:
                                 translated = translator.translate(text)
                                 translation_cache[text] = translated
+                                cache_misses += 1
 
                             bbox = fitz.Rect(span["bbox"])
                             font_size = max(6, float(span.get("size", 10)))
@@ -237,8 +294,16 @@ class PDFTranslatorApp:
                                 align=fitz.TEXT_ALIGN_LEFT,
                             )
                             translated_span_count += 1
+                            page_translated_count += 1
 
                 percent = ((p_index + 1) / total_pages) * 100
+                self.run_logger.info(
+                    "Page %s/%s complete | text spans seen: %s | translated spans: %s",
+                    p_index + 1,
+                    total_pages,
+                    page_span_count,
+                    page_translated_count,
+                )
                 self.root.after(0, self.progress.set, percent)
                 self.root.after(
                     0,
@@ -255,13 +320,33 @@ class PDFTranslatorApp:
 
             doc.save(out_path)
             doc.close()
+            self.run_logger.info(
+                "Saved translated PDF. Totals | spans seen: %s | translated: %s | cache hits: %s | cache misses: %s",
+                total_span_count,
+                translated_span_count,
+                cache_hits,
+                cache_misses,
+            )
 
             self.root.after(0, self.status.set, f"Done: {out_path}")
-            self.root.after(0, messagebox.showinfo, "Translation complete", "PDF translation completed successfully.")
+            self.root.after(
+                0,
+                messagebox.showinfo,
+                "Translation complete",
+                f"PDF translation completed successfully.\nVerbose log: {self.run_log_path}",
+            )
         except Exception as exc:
+            if self.run_logger:
+                self.run_logger.error("Translation failed: %s", exc)
+                self.run_logger.error(traceback.format_exc())
             self.root.after(0, self.status.set, "Translation failed")
-            self.root.after(0, messagebox.showerror, "Error", str(exc))
+            if self.run_log_path:
+                error_message = f"{exc}\n\nVerbose log: {self.run_log_path}"
+            else:
+                error_message = str(exc)
+            self.root.after(0, messagebox.showerror, "Error", error_message)
         finally:
+            self._stop_verbose_log()
             self.root.after(0, self.translate_btn.configure, {"state": "normal"})
 
 
