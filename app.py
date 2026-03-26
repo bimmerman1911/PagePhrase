@@ -308,18 +308,9 @@ class PDFTranslatorApp:
                     translated = item["translated"]
                     font_size = item["font_size"]
                     original_text = item["original_text"]
-
-                    insert_result = page.insert_textbox(
-                        bbox,
-                        translated,
-                        fontsize=font_size,
-                        color=(0, 0, 0),
-                        align=fitz.TEXT_ALIGN_LEFT,
-                    )
-
-                    if insert_result < 0:
-                        retry_size = max(4, font_size - 1)
-                        page_insert_retry_count += 1
+                    insert_result = -1
+                    retry_sizes = [font_size, max(4, font_size - 1), max(4, font_size - 2)]
+                    for idx, retry_size in enumerate(retry_sizes):
                         insert_result = page.insert_textbox(
                             bbox,
                             translated,
@@ -327,17 +318,32 @@ class PDFTranslatorApp:
                             color=(0, 0, 0),
                             align=fitz.TEXT_ALIGN_LEFT,
                         )
+                        if insert_result >= 0:
+                            break
+                        if idx > 0:
+                            page_insert_retry_count += 1
 
                     if insert_result < 0:
-                        page_insert_fail_count += 1
-                        self.run_logger.warning(
-                            "Textbox insert failed on page %s | bbox=%s | font=%.2f | text=%r | translated=%r",
-                            p_index + 1,
-                            tuple(round(v, 2) for v in bbox),
-                            font_size,
-                            original_text[:120],
-                            translated[:120],
-                        )
+                        fallback_point = fitz.Point(bbox.x0, bbox.y1 - 1)
+                        fallback_size = max(4, font_size - 2)
+                        try:
+                            page.insert_text(
+                                fallback_point,
+                                translated,
+                                fontsize=fallback_size,
+                                color=(0, 0, 0),
+                            )
+                            page_insert_retry_count += 1
+                        except Exception:
+                            page_insert_fail_count += 1
+                            self.run_logger.warning(
+                                "Textbox insert failed on page %s | bbox=%s | font=%.2f | text=%r | translated=%r",
+                                p_index + 1,
+                                tuple(round(v, 2) for v in bbox),
+                                font_size,
+                                original_text[:120],
+                                translated[:120],
+                            )
 
                 percent = ((p_index + 1) / total_pages) * 100
                 self.run_logger.info(
