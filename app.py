@@ -261,6 +261,10 @@ class PDFTranslatorApp:
                 blocks = page.get_text("dict").get("blocks", [])
                 page_span_count = 0
                 page_translated_count = 0
+                page_redaction_count = 0
+                page_insert_fail_count = 0
+                page_insert_retry_count = 0
+                translated_items = []
 
                 for block in blocks:
                     for line in block.get("lines", []):
@@ -284,25 +288,67 @@ class PDFTranslatorApp:
                             font_size = max(6, float(span.get("size", 10)))
 
                             page.add_redact_annot(bbox, fill=False)
-                            page.apply_redactions()
-
-                            page.insert_textbox(
-                                bbox,
-                                translated,
-                                fontsize=font_size,
-                                color=(0, 0, 0),
-                                align=fitz.TEXT_ALIGN_LEFT,
+                            page_redaction_count += 1
+                            translated_items.append(
+                                {
+                                    "bbox": bbox,
+                                    "translated": translated,
+                                    "font_size": font_size,
+                                    "original_text": text,
+                                }
                             )
                             translated_span_count += 1
                             page_translated_count += 1
 
+                if page_redaction_count:
+                    page.apply_redactions()
+
+                for item in translated_items:
+                    bbox = item["bbox"]
+                    translated = item["translated"]
+                    font_size = item["font_size"]
+                    original_text = item["original_text"]
+
+                    insert_result = page.insert_textbox(
+                        bbox,
+                        translated,
+                        fontsize=font_size,
+                        color=(0, 0, 0),
+                        align=fitz.TEXT_ALIGN_LEFT,
+                    )
+
+                    if insert_result < 0:
+                        retry_size = max(4, font_size - 1)
+                        page_insert_retry_count += 1
+                        insert_result = page.insert_textbox(
+                            bbox,
+                            translated,
+                            fontsize=retry_size,
+                            color=(0, 0, 0),
+                            align=fitz.TEXT_ALIGN_LEFT,
+                        )
+
+                    if insert_result < 0:
+                        page_insert_fail_count += 1
+                        self.run_logger.warning(
+                            "Textbox insert failed on page %s | bbox=%s | font=%.2f | text=%r | translated=%r",
+                            p_index + 1,
+                            tuple(round(v, 2) for v in bbox),
+                            font_size,
+                            original_text[:120],
+                            translated[:120],
+                        )
+
                 percent = ((p_index + 1) / total_pages) * 100
                 self.run_logger.info(
-                    "Page %s/%s complete | text spans seen: %s | translated spans: %s",
+                    "Page %s/%s complete | text spans seen: %s | translated spans: %s | redactions: %s | insert retries: %s | insert failures: %s",
                     p_index + 1,
                     total_pages,
                     page_span_count,
                     page_translated_count,
+                    page_redaction_count,
+                    page_insert_retry_count,
+                    page_insert_fail_count,
                 )
                 self.root.after(0, self.progress.set, percent)
                 self.root.after(
