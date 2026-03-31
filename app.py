@@ -361,7 +361,7 @@ class PDFTranslatorApp:
                             bbox = fitz.Rect(span["bbox"])
                             font_size = max(6, float(span.get("size", 10)))
 
-                            page.add_redact_annot(bbox, fill=False)
+                            page.add_redact_annot(bbox, fill=(1, 1, 1))
                             page_redaction_count += 1
                             translated_items.append(
                                 {
@@ -375,7 +375,11 @@ class PDFTranslatorApp:
                             page_translated_count += 1
 
                 if page_redaction_count:
-                    page.apply_redactions()
+                    page.apply_redactions(
+                        images=fitz.PDF_REDACT_IMAGE_NONE,
+                        graphics=fitz.PDF_REDACT_LINE_ART_NONE,
+                        text=fitz.PDF_REDACT_TEXT_REMOVE,
+                    )
 
                 for item in translated_items:
                     bbox = item["bbox"]
